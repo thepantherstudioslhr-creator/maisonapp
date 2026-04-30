@@ -11,21 +11,30 @@ export function PWAInstallPrompt() {
     const isInstalled = (window.navigator as any).standalone || isStandalone;
 
     if (isInstalled) {
+      console.log('✅ App already installed');
       return; // Don't show prompt if already installed
+    }
+
+    // Check if user dismissed before
+    const dismissed = localStorage.getItem('pwa-install-dismissed');
+    if (dismissed) {
+      console.log('⏸️ User previously dismissed install prompt');
     }
 
     // Listen for install prompt
     const handleBeforeInstallPrompt = (e: Event) => {
+      console.log('🎯 Install prompt event received!');
       e.preventDefault();
       setDeferredPrompt(e);
       
-      // Show prompt after 3 seconds (to not be annoying)
-      setTimeout(() => {
-        setShowPrompt(true);
-      }, 3000);
+      // Show prompt immediately (no delay!)
+      setShowPrompt(true);
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    // Debug: Check if event fires
+    console.log('👂 Listening for beforeinstallprompt event...');
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -33,15 +42,20 @@ export function PWAInstallPrompt() {
   }, []);
 
   const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
+    if (!deferredPrompt) {
+      console.error('❌ No deferred prompt available');
+      return;
+    }
 
+    console.log('📥 Showing install prompt...');
+    
     // Show the install prompt
     deferredPrompt.prompt();
 
     // Wait for the user's response
     const { outcome } = await deferredPrompt.userChoice;
     
-    console.log(`User response to install prompt: ${outcome}`);
+    console.log(`✅ User response to install prompt: ${outcome}`);
     
     // Clear the prompt
     setDeferredPrompt(null);
@@ -49,8 +63,9 @@ export function PWAInstallPrompt() {
   };
 
   const handleDismiss = () => {
+    console.log('⏸️ User dismissed install prompt');
     setShowPrompt(false);
-    // Remember dismissal (optional - store in localStorage)
+    // Remember dismissal
     localStorage.setItem('pwa-install-dismissed', 'true');
   };
 
