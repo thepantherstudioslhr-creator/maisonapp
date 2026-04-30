@@ -1,6 +1,8 @@
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import LoginScreen from './components/LoginScreen';
 import Dashboard from './components/Dashboard';
+import { PWAInstallPrompt } from './components/PWAInstallPrompt';
+import { OnlineStatus } from './components/OnlineStatus';
 import logoImage from '../imports/555031729_122102984955033682_4637142757421852213_n.jpg';
 
 function AppContent() {
@@ -25,7 +27,13 @@ function AppContent() {
     );
   }
 
-  return user ? <Dashboard /> : <LoginScreen />;
+  return (
+    <>
+      {user ? <Dashboard /> : <LoginScreen />}
+      <OnlineStatus />
+      <PWAInstallPrompt />
+    </>
+  );
 }
 
 export default function App() {

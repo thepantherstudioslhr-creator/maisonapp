@@ -1,3 +1,42 @@
 @import './fonts.css';
 @import './tailwind.css';
 @import './theme.css';
+
+/* PWA Install Prompt Animation */
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out forwards;
+}
+
+/* Offline/Online Status Pulse */
+@keyframes pulse-border {
+  0%, 100% {
+    border-width: 3px;
+  }
+  50% {
+    border-width: 5px;
+  }
+}
+
+/* Service Worker Update Available */
+@keyframes shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-5px);
+  }
+  75% {
+    transform: translateX(5px);
+  }
+}
