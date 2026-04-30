@@ -1,0 +1,67 @@
+MAISON ROYALE - Complete File List
+===================================
+
+IMPORTANT FILES TO UPLOAD TO GITHUB:
+
+Root Files:
+- package.json
+- pnpm-lock.yaml
+- vite.config.ts
+- postcss.config.mjs
+- vercel.json
+- .env.example
+- START-APP.bat
+
+Documentation:
+- DEPLOYMENT_GUIDE.md
+- SETUP_GUIDE.md
+- MOBILE_INSTALLATION_GUIDE.md
+- PWA_SETUP_CHECKLIST.md
+
+Public Folder (/public/):
+- manifest.json
+(Add icon-192.png and icon-512.png later)
+
+Source Code (/src/):
+
+Main:
+- src/app/App.tsx
+
+Components (/src/app/components/):
+- src/app/components/Dashboard.tsx
+- src/app/components/LoginScreen.tsx
+- src/app/components/BookingForm.tsx
+- src/app/components/BookingsList.tsx
+- src/app/components/Reports.tsx
+- src/app/components/CalendarView.tsx
+- src/app/components/ReceiptGenerator.tsx
+- src/app/components/OfflineIndicator.tsx
+
+Utils (/src/app/utils/):
+- src/app/utils/supabase.ts
+- src/app/utils/offlineSync.ts
+
+Contexts (/src/app/contexts/):
+- src/app/contexts/AuthContext.tsx
+
+Types (/src/app/types/):
+- src/app/types/index.ts
+
+Assets (/src/app/assets/):
+- src/app/assets/logo.ts
+
+Imports (/src/imports/):
+- src/imports/555031729_122102984955033682_4637142757421852213_n.jpg
+
+Styles (/src/styles/):
+- src/styles/index.css
+- src/styles/tailwind.css
+- src/styles/theme.css
+- src/styles/fonts.css
+
+DO NOT UPLOAD:
+- node_modules/ (too large, auto-installed)
+- .git/ (created by GitHub)
+- *.make files
+- test-*.js files
+
