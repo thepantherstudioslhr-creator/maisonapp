@@ -1,12 +1,13 @@
 {
-  "name": "Maison Royale Management",
+  "name": "Maison Royale Residency",
   "short_name": "Maison Royale",
-  "description": "Luxury Apartment Booking Management System",
+  "description": "Luxury Apartment Booking & Management System - Works Offline",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0a0a",
   "theme_color": "#f59e0b",
   "orientation": "portrait-primary",
+  "scope": "/",
   "icons": [
     {
       "src": "/icon-192.png",
@@ -37,5 +38,12 @@
       "url": "/?tab=new-booking",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     }
-  ]
+  ],
+  "prefer_related_applications": false,
+  "related_applications": [],
+  "share_target": {
+    "action": "/",
+    "method": "GET",
+    "enctype": "application/x-www-form-urlencoded"
+  }
 }
