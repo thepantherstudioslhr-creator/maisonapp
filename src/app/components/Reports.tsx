@@ -48,9 +48,11 @@ const Reports: React.FC = () => {
     });
 
     const revenue = dayBookings.reduce((sum, b) => sum + b.total_amount, 0);
+    const cashRevenue = dayBookings.reduce((sum, b) => sum + (b.cash_amount || 0), 0);
+    const onlineRevenue = dayBookings.reduce((sum, b) => sum + (b.online_amount || 0), 0);
     const occupancy = dayBookings.filter((b) => b.status === 'active').length;
 
-    return { revenue, bookings: dayBookings.length, occupancy };
+    return { revenue, cashRevenue, onlineRevenue, bookings: dayBookings.length, occupancy };
   };
 
   const getMonthlyStats = () => {
@@ -64,11 +66,13 @@ const Reports: React.FC = () => {
     });
 
     const revenue = monthBookings.reduce((sum, b) => sum + b.total_amount, 0);
+    const cashRevenue = monthBookings.reduce((sum, b) => sum + (b.cash_amount || 0), 0);
+    const onlineRevenue = monthBookings.reduce((sum, b) => sum + (b.online_amount || 0), 0);
     const totalNights = monthBookings.reduce((sum, b) => sum + b.nights, 0);
     const occupancyRate =
       monthBookings.length > 0 ? (totalNights / (APARTMENTS.length * 30)) * 100 : 0;
 
-    return { revenue, bookings: monthBookings.length, occupancyRate, totalNights };
+    return { revenue, cashRevenue, onlineRevenue, bookings: monthBookings.length, occupancyRate, totalNights };
   };
 
   const getWeeklyStats = () => {
@@ -82,11 +86,13 @@ const Reports: React.FC = () => {
     });
 
     const revenue = weekBookings.reduce((sum, b) => sum + b.total_amount, 0);
+    const cashRevenue = weekBookings.reduce((sum, b) => sum + (b.cash_amount || 0), 0);
+    const onlineRevenue = weekBookings.reduce((sum, b) => sum + (b.online_amount || 0), 0);
     const totalNights = weekBookings.reduce((sum, b) => sum + b.nights, 0);
     const occupancyRate =
       weekBookings.length > 0 ? (totalNights / (APARTMENTS.length * 7)) * 100 : 0;
 
-    return { revenue, bookings: weekBookings.length, occupancyRate, totalNights, weekStart, weekEnd };
+    return { revenue, cashRevenue, onlineRevenue, bookings: weekBookings.length, occupancyRate, totalNights, weekStart, weekEnd };
   };
 
   const getApartmentStats = () => {
@@ -347,11 +353,36 @@ const Reports: React.FC = () => {
           <h3 className="text-xl text-yellow-500 mb-4">
             Daily Report - {format(new Date(selectedDate), 'MMMM dd, yyyy')}
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-neutral-900 border border-yellow-600/30 rounded-lg p-6">
-              <p className="text-neutral-400 mb-2">Daily Revenue</p>
-              <p className="text-4xl text-yellow-500">Rs {getDailyStats().revenue.toLocaleString()}</p>
+
+          {/* Total Revenue with Breakdown */}
+          <div className="bg-gradient-to-br from-yellow-500/10 to-amber-600/10 border-2 border-yellow-500/30 rounded-2xl p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-xl text-yellow-400 font-semibold">Daily Revenue</h4>
+              <p className="text-4xl text-yellow-400 font-bold">Rs {getDailyStats().revenue.toLocaleString()}</p>
             </div>
+
+            {/* Cash vs Online Breakdown */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xl">💵</span>
+                  <p className="text-sm text-neutral-400">Cash</p>
+                </div>
+                <p className="text-2xl text-green-400 font-bold">Rs {getDailyStats().cashRevenue.toLocaleString()}</p>
+              </div>
+
+              <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xl">💳</span>
+                  <p className="text-sm text-neutral-400">Online</p>
+                </div>
+                <p className="text-2xl text-blue-400 font-bold">Rs {getDailyStats().onlineRevenue.toLocaleString()}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Other Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-neutral-900 border border-green-500/30 rounded-lg p-6">
               <p className="text-neutral-400 mb-2">Bookings Today</p>
               <p className="text-4xl text-green-500">{getDailyStats().bookings}</p>
@@ -370,11 +401,36 @@ const Reports: React.FC = () => {
           <h3 className="text-xl text-yellow-500 mb-4">
             Weekly Report - {format(getWeeklyStats().weekStart, 'MMM dd')} to {format(getWeeklyStats().weekEnd, 'MMM dd, yyyy')}
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="bg-neutral-900 border border-yellow-600/30 rounded-lg p-6">
-              <p className="text-neutral-400 mb-2">Weekly Revenue</p>
-              <p className="text-4xl text-yellow-500">Rs {getWeeklyStats().revenue.toLocaleString()}</p>
+
+          {/* Total Revenue with Breakdown */}
+          <div className="bg-gradient-to-br from-yellow-500/10 to-amber-600/10 border-2 border-yellow-500/30 rounded-2xl p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-xl text-yellow-400 font-semibold">Weekly Revenue</h4>
+              <p className="text-4xl text-yellow-400 font-bold">Rs {getWeeklyStats().revenue.toLocaleString()}</p>
             </div>
+
+            {/* Cash vs Online Breakdown */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xl">💵</span>
+                  <p className="text-sm text-neutral-400">Cash</p>
+                </div>
+                <p className="text-2xl text-green-400 font-bold">Rs {getWeeklyStats().cashRevenue.toLocaleString()}</p>
+              </div>
+
+              <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xl">💳</span>
+                  <p className="text-sm text-neutral-400">Online</p>
+                </div>
+                <p className="text-2xl text-blue-400 font-bold">Rs {getWeeklyStats().onlineRevenue.toLocaleString()}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Other Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-neutral-900 border border-green-500/30 rounded-lg p-6">
               <p className="text-neutral-400 mb-2">Total Bookings</p>
               <p className="text-4xl text-green-500">{getWeeklyStats().bookings}</p>
@@ -397,11 +453,46 @@ const Reports: React.FC = () => {
           <h3 className="text-xl text-yellow-500 mb-4">
             Monthly Report - {format(new Date(selectedDate), 'MMMM yyyy')}
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="bg-neutral-900 border border-yellow-600/30 rounded-lg p-6">
-              <p className="text-neutral-400 mb-2">Monthly Revenue</p>
-              <p className="text-4xl text-yellow-500">Rs {getMonthlyStats().revenue.toLocaleString()}</p>
+
+          {/* Total Revenue with Breakdown */}
+          <div className="bg-gradient-to-br from-yellow-500/10 to-amber-600/10 border-2 border-yellow-500/30 rounded-2xl p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-xl text-yellow-400 font-semibold">Monthly Revenue</h4>
+              <p className="text-4xl text-yellow-400 font-bold">Rs {getMonthlyStats().revenue.toLocaleString()}</p>
             </div>
+
+            {/* Cash vs Online Breakdown */}
+            <div className="grid grid-cols-2 gap-4 mt-4">
+              <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-2xl">💵</span>
+                  <p className="text-sm text-neutral-400">Cash Revenue</p>
+                </div>
+                <p className="text-2xl text-green-400 font-bold">Rs {getMonthlyStats().cashRevenue.toLocaleString()}</p>
+                <p className="text-xs text-neutral-500 mt-1">
+                  {getMonthlyStats().revenue > 0
+                    ? ((getMonthlyStats().cashRevenue / getMonthlyStats().revenue) * 100).toFixed(1)
+                    : 0}% of total
+                </p>
+              </div>
+
+              <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-2xl">💳</span>
+                  <p className="text-sm text-neutral-400">Online Revenue</p>
+                </div>
+                <p className="text-2xl text-blue-400 font-bold">Rs {getMonthlyStats().onlineRevenue.toLocaleString()}</p>
+                <p className="text-xs text-neutral-500 mt-1">
+                  {getMonthlyStats().revenue > 0
+                    ? ((getMonthlyStats().onlineRevenue / getMonthlyStats().revenue) * 100).toFixed(1)
+                    : 0}% of total
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Other Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-neutral-900 border border-green-500/30 rounded-lg p-6">
               <p className="text-neutral-400 mb-2">Total Bookings</p>
               <p className="text-4xl text-green-500">{getMonthlyStats().bookings}</p>

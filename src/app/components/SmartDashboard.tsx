@@ -9,6 +9,8 @@ interface SmartDashboardProps {
   availableRooms: number;
   totalRooms: number;
   todayRevenue: number;
+  cashRevenue: number;
+  onlineRevenue: number;
   occupancyRate: number;
 }
 
@@ -19,6 +21,8 @@ export function SmartDashboard({
   availableRooms,
   totalRooms,
   todayRevenue,
+  cashRevenue,
+  onlineRevenue,
   occupancyRate,
 }: SmartDashboardProps) {
   const stats = [
@@ -102,23 +106,50 @@ export function SmartDashboard({
         })}
       </div>
 
-      {/* Today's Revenue Card */}
+      {/* Today's Revenue Card with Payment Breakdown */}
       <div className="mt-4 bg-gradient-to-br from-amber-500/10 to-yellow-600/10 border border-amber-500/30 rounded-xl p-4 sm:p-5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-3 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-600">
-              <DollarSign className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <p className="text-neutral-400 text-sm">Today's Revenue</p>
-              <p className="text-2xl sm:text-3xl font-bold text-amber-400">
-                PKR {todayRevenue.toLocaleString()}
-              </p>
-            </div>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-3 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-600">
+            <DollarSign className="w-6 h-6 text-white" />
+          </div>
+          <div className="flex-1">
+            <p className="text-neutral-400 text-sm">Today's Revenue</p>
+            <p className="text-2xl sm:text-3xl font-bold text-amber-400">
+              PKR {todayRevenue.toLocaleString()}
+            </p>
           </div>
           <div className="text-right">
             <p className="text-xs text-neutral-500">Total Rooms</p>
             <p className="text-xl font-bold text-white">{totalRooms}</p>
+          </div>
+        </div>
+
+        {/* Payment Method Breakdown */}
+        <div className="grid grid-cols-2 gap-3 pt-3 border-t border-amber-500/20">
+          <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-lg">💵</span>
+              <p className="text-xs text-neutral-400">Cash</p>
+            </div>
+            <p className="text-lg sm:text-xl font-bold text-green-400">
+              PKR {cashRevenue.toLocaleString()}
+            </p>
+            <p className="text-xs text-neutral-500 mt-1">
+              {todayRevenue > 0 ? ((cashRevenue / todayRevenue) * 100).toFixed(0) : 0}%
+            </p>
+          </div>
+
+          <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-lg">💳</span>
+              <p className="text-xs text-neutral-400">Online</p>
+            </div>
+            <p className="text-lg sm:text-xl font-bold text-blue-400">
+              PKR {onlineRevenue.toLocaleString()}
+            </p>
+            <p className="text-xs text-neutral-500 mt-1">
+              {todayRevenue > 0 ? ((onlineRevenue / todayRevenue) * 100).toFixed(0) : 0}%
+            </p>
           </div>
         </div>
       </div>

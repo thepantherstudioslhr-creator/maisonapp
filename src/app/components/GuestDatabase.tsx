@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase';
 import { Guest } from '../types';
 import { format } from 'date-fns';
-import { Users, Star, Calendar, DollarSign, Phone, Mail, MapPin, Plus, Trash2, X } from 'lucide-react';
+import { Users, Star, Calendar, DollarSign, Phone, Mail, MapPin, Plus, Trash2, X, Edit } from 'lucide-react';
+import EditGuestModal from './EditGuestModal';
 
 export function GuestDatabase() {
   const [guests, setGuests] = useState<Guest[]>([]);
@@ -10,6 +11,7 @@ export function GuestDatabase() {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'bookings' | 'spent' | 'lastVisit'>('bookings');
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingGuest, setEditingGuest] = useState<Guest | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -89,6 +91,11 @@ export function GuestDatabase() {
       console.error('Error deleting guest:', error);
       alert('Failed to delete guest');
     }
+  };
+
+  const handleEditComplete = () => {
+    setEditingGuest(null);
+    loadGuests();
   };
 
   const filteredAndSortedGuests = guests
@@ -334,13 +341,22 @@ export function GuestDatabase() {
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={() => handleDeleteGuest(guest.id, guest.name)}
-                  className="p-2 hover:bg-red-500/20 rounded-lg transition-colors group"
-                  title="Delete guest"
-                >
-                  <Trash2 className="w-5 h-5 text-neutral-400 group-hover:text-red-400" />
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setEditingGuest(guest)}
+                    className="p-2 hover:bg-amber-500/20 rounded-lg transition-colors group"
+                    title="Edit guest"
+                  >
+                    <Edit className="w-5 h-5 text-neutral-400 group-hover:text-amber-400" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteGuest(guest.id, guest.name)}
+                    className="p-2 hover:bg-red-500/20 rounded-lg transition-colors group"
+                    title="Delete guest"
+                  >
+                    <Trash2 className="w-5 h-5 text-neutral-400 group-hover:text-red-400" />
+                  </button>
+                </div>
               </div>
 
               {/* Guest Stats */}
@@ -395,6 +411,15 @@ export function GuestDatabase() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Edit Guest Modal */}
+      {editingGuest && (
+        <EditGuestModal
+          guest={editingGuest}
+          onClose={() => setEditingGuest(null)}
+          onUpdate={handleEditComplete}
+        />
       )}
     </div>
   );

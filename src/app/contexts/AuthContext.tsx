@@ -48,19 +48,95 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const login = async (email: string, password: string) => {
+    console.log('🔐 Attempting login for:', email);
+
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
-    if (error) throw error;
+    if (error) {
+      console.error('❌ Login error:', error);
+
+      // Detailed error messages
+      if (error.message.includes('Invalid API key') || error.message.includes('JWT')) {
+        throw new Error('Authentication service configuration error. Please contact administrator.');
+      }
+
+      if (error.message.includes('Invalid login credentials')) {
+        throw new Error('Invalid email or password. Make sure user exists in Supabase Auth.');
+      }
+
+      if (error.message.includes('Email not confirmed')) {
+        throw new Error(
+          'Email not confirmed. Fix this by running in Supabase SQL Editor:\n\n' +
+          `UPDATE auth.users SET email_confirmed_at = now() WHERE email = '${email}';`
+        );
+      }
+
+      throw error;
+    }
+
+    console.log('✅ Auth successful, user ID:', data.user?.id);
 
     if (data.user) {
-      const { data: userData } = await supabase
+      // First check if user exists in users table
+      let { data: userData } = await supabase
         .from('users')
         .select('*')
         .eq('auth_user_id', data.user.id)
         .single();
+
+      // If user doesn't exist in users table by auth_user_id, check by email (may exist from rate-limit fallback)
+      if (!userData) {
+        const { data: emailMatch } = await supabase
+          .from('users')
+          .select('*')
+          .eq('email', data.user.email!)
+          .maybeSingle();
+
+        if (emailMatch) {
+          // Link the auth account and activate the existing record
+          const { data: updated, error: updateError } = await supabase
+            .from('users')
+            .update({ auth_user_id: data.user.id, is_active: true })
+            .eq('email', data.user.email!)
+            .select()
+            .single();
+
+          if (updateError) {
+            console.error('Error linking user:', updateError);
+            throw new Error('Failed to link user profile. Please contact admin.');
+          }
+
+          userData = updated;
+          console.log('✅ Existing user linked to auth account:', userData);
+        } else {
+          // No record at all — create fresh
+          const role = email.includes('admin') ? 'admin' : 'manager';
+
+          const { data: newUser, error: createError } = await supabase
+            .from('users')
+            .insert({
+              auth_user_id: data.user.id,
+              email: data.user.email,
+              name: data.user.user_metadata?.name || data.user.email?.split('@')[0] || 'User',
+              role,
+              is_active: true,
+              theme_preference: 'dark',
+            })
+            .select()
+            .single();
+
+          if (createError) {
+            console.error('Error creating user in users table:', createError);
+            throw new Error('Failed to create user profile. Please contact admin.');
+          }
+
+          userData = newUser;
+          console.log('✅ User created in users table:', userData);
+        }
+      }
 
       if (userData) {
         setUser(userData as User);

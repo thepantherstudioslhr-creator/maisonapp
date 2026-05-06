@@ -25,7 +25,8 @@ const BookingForm: React.FC<BookingFormProps> = ({ apartment, onClose, onComplet
     price_per_night: apartment.price_per_night,
     discount: 0,
     extra_charges: 0,
-    advance_payment: 0,
+    cash_amount: 0,
+    online_amount: 0,
     payment_method: 'cash',
     notes: '',
     special_requests: '',
@@ -51,7 +52,7 @@ const BookingForm: React.FC<BookingFormProps> = ({ apartment, onClose, onComplet
   };
 
   const { nights, subtotal, total } = calculateTotal();
-  const balance = total - formData.advance_payment;
+  const balance = total - (formData.cash_amount + formData.online_amount);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,8 +118,10 @@ const BookingForm: React.FC<BookingFormProps> = ({ apartment, onClose, onComplet
         discount: formData.discount,
         extra_charges: formData.extra_charges,
         total_amount: total,
-        advance_payment: formData.advance_payment,
+        advance_payment: formData.cash_amount + formData.online_amount,
         balance,
+        cash_amount: formData.cash_amount,
+        online_amount: formData.online_amount,
         payment_method: formData.payment_method,
         notes: formData.notes,
         special_requests: formData.special_requests,
@@ -436,43 +439,34 @@ const BookingForm: React.FC<BookingFormProps> = ({ apartment, onClose, onComplet
                 />
               </div>
               <div>
-                <label className="block text-neutral-300 mb-2 text-sm sm:text-base font-medium">Advance Payment (Rs) *</label>
+                <label className="block text-neutral-300 mb-2 text-sm sm:text-base font-medium">💵 Cash Amount (Rs)</label>
                 <input
                   type="number"
-                  name="advance_payment"
-                  value={formData.advance_payment}
+                  name="cash_amount"
+                  value={formData.cash_amount}
                   onChange={handleChange}
                   min="0"
-                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-neutral-950/50 border border-neutral-700/50 rounded-xl text-white focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition-all text-sm sm:text-base"
-                  required
+                  max={total}
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-neutral-950/50 border-2 border-green-500/50 rounded-xl text-white focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20 transition-all text-sm sm:text-base font-bold"
                 />
+                <p className="text-green-400 text-xs mt-1.5 font-semibold">
+                  💵 Cash: Rs {formData.cash_amount.toLocaleString()}
+                </p>
               </div>
               <div>
-                <label className="block text-neutral-300 mb-2 text-sm sm:text-base font-medium">Payment Method *</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setFormData(prev => ({ ...prev, payment_method: 'cash' }))}
-                    className={`px-4 py-2.5 sm:py-3 rounded-xl font-semibold text-sm sm:text-base transition-all ${
-                      formData.payment_method === 'cash'
-                        ? 'bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-lg shadow-emerald-500/20'
-                        : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
-                    }`}
-                  >
-                    💵 Cash
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormData(prev => ({ ...prev, payment_method: 'online' }))}
-                    className={`px-4 py-2.5 sm:py-3 rounded-xl font-semibold text-sm sm:text-base transition-all ${
-                      formData.payment_method === 'online'
-                        ? 'bg-gradient-to-r from-blue-500 to-cyan-600 text-white shadow-lg shadow-blue-500/20'
-                        : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
-                    }`}
-                  >
-                    💳 Online
-                  </button>
-                </div>
+                <label className="block text-neutral-300 mb-2 text-sm sm:text-base font-medium">💳 Online Amount (Rs)</label>
+                <input
+                  type="number"
+                  name="online_amount"
+                  value={formData.online_amount}
+                  onChange={handleChange}
+                  min="0"
+                  max={total}
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-neutral-950/50 border-2 border-blue-500/50 rounded-xl text-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all text-sm sm:text-base font-bold"
+                />
+                <p className="text-blue-400 text-xs mt-1.5 font-semibold">
+                  💳 Online: Rs {formData.online_amount.toLocaleString()}
+                </p>
               </div>
             </div>
           </div>
@@ -528,15 +522,19 @@ const BookingForm: React.FC<BookingFormProps> = ({ apartment, onClose, onComplet
                 <span className="text-amber-400 font-semibold">Total Amount</span>
                 <span className="text-amber-400 font-bold">Rs {total.toLocaleString()}</span>
               </div>
-              <div className="flex justify-between text-white">
-                <span className="text-neutral-400">Advance Paid</span>
-                <span className="font-medium">Rs {formData.advance_payment.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between text-white">
-                <span className="text-neutral-400">Payment Method</span>
-                <span className={`font-semibold ${formData.payment_method === 'cash' ? 'text-emerald-400' : 'text-blue-400'}`}>
-                  {formData.payment_method === 'cash' ? '💵 Cash' : '💳 Online'}
-                </span>
+              <div className="bg-neutral-800/30 rounded-lg p-3 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-neutral-400">💵 Cash Paid</span>
+                  <span className="text-green-400 font-semibold">Rs {formData.cash_amount.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-neutral-400">💳 Online Paid</span>
+                  <span className="text-blue-400 font-semibold">Rs {formData.online_amount.toLocaleString()}</span>
+                </div>
+                <div className="border-t border-neutral-700/50 pt-2 flex justify-between">
+                  <span className="text-white font-medium">Total Advance</span>
+                  <span className="text-white font-bold">Rs {(formData.cash_amount + formData.online_amount).toLocaleString()}</span>
+                </div>
               </div>
               <div className="border-t border-neutral-700/50 pt-2 sm:pt-3 flex justify-between text-base sm:text-lg">
                 <span className="text-rose-400 font-semibold">Balance Remaining</span>

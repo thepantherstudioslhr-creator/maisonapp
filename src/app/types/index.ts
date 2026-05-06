@@ -117,6 +117,8 @@ export interface Booking {
   advance_payment: number;
   balance: number;
   payment_method?: 'cash' | 'online';
+  cash_amount?: number;
+  online_amount?: number;
   notes?: string;
   special_requests?: string;
   cleaning_status?: 'pending' | 'cleaning' | 'cleaned';

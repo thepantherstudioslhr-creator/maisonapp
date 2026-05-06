@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../utils/supabase';
 import { Settings as SettingsIcon, Moon, Sun, User, Building2, Users, X, Home } from 'lucide-react';
 import { RoomManagement } from './RoomManagement';
-import { UserManagement } from './UserManagement';
+import UserManagement from './UserManagement';
 
 interface SettingsProps {
   onClose: () => void;

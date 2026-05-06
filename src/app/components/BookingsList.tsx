@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase';
 import { Booking, BookingStatus, APARTMENTS } from '../types';
 import { format } from 'date-fns';
+import { Edit } from 'lucide-react';
+import EditBookingModal from './EditBookingModal';
 
 interface BookingsListProps {
   onBookingUpdated: () => void;
@@ -12,6 +14,7 @@ const BookingsList: React.FC<BookingsListProps> = ({ onBookingUpdated }) => {
   const [filter, setFilter] = useState<BookingStatus | 'all'>('active');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
+  const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
 
   useEffect(() => {
     loadBookings();
@@ -99,6 +102,12 @@ const BookingsList: React.FC<BookingsListProps> = ({ onBookingUpdated }) => {
     );
   };
 
+  const handleEditComplete = () => {
+    setEditingBooking(null);
+    loadBookings();
+    onBookingUpdated();
+  };
+
   return (
     <div>
       {/* Header */}
@@ -177,7 +186,17 @@ const BookingsList: React.FC<BookingsListProps> = ({ onBookingUpdated }) => {
                 </div>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
+                {/* Edit button for ALL booking statuses */}
+                <button
+                  onClick={() => setEditingBooking(booking)}
+                  className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded text-sm transition-colors flex items-center gap-2"
+                >
+                  <Edit className="w-4 h-4" />
+                  Edit
+                </button>
+
+                {/* Action buttons for active bookings */}
                 {booking.status === 'active' && (
                   <>
                     <button
@@ -194,6 +213,8 @@ const BookingsList: React.FC<BookingsListProps> = ({ onBookingUpdated }) => {
                     </button>
                   </>
                 )}
+
+                {/* Delete button for all */}
                 <button
                   onClick={() => handleDelete(booking.id)}
                   className="bg-neutral-800 hover:bg-neutral-700 text-red-400 px-4 py-2 rounded text-sm transition-colors ml-auto"
@@ -204,6 +225,15 @@ const BookingsList: React.FC<BookingsListProps> = ({ onBookingUpdated }) => {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Edit Modal */}
+      {editingBooking && (
+        <EditBookingModal
+          booking={editingBooking}
+          onClose={() => setEditingBooking(null)}
+          onUpdate={handleEditComplete}
+        />
       )}
     </div>
   );

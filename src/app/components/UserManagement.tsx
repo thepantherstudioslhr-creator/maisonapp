@@ -1,25 +1,31 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase';
-import { User, UserRole } from '../types';
-import { Plus, Trash2, X, Shield, UserCheck, Users as UsersIcon } from 'lucide-react';
+import { User } from '../types';
+import { UserPlus, Shield, Edit, Trash2, Key, CheckCircle, XCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { getRoleDisplayName, getRoleBadgeColor } from '../utils/permissions';
 
-interface UserManagementProps {
-  onClose: () => void;
+interface AuthUser {
+  id: string;
+  email: string;
+  created_at: string;
+  user_metadata?: any;
 }
 
-export function UserManagement({ onClose }: UserManagementProps) {
-  const { user: currentUser, hasPermission } = useAuth();
-  const [users, setUsers] = useState<User[]>([]);
+interface UserManagementProps {
+  onClose?: () => void;
+}
+
+export default function UserManagement({ onClose }: UserManagementProps = {}) {
+  const { user: currentUser, theme } = useAuth();
+  const [authUsers, setAuthUsers] = useState<AuthUser[]>([]);
+  const [tableUsers, setTableUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    password: '',
-    role: 'staff' as UserRole,
-  });
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<AuthUser | null>(null);
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserRole, setNewUserRole] = useState<'admin' | 'manager'>('manager');
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     loadUsers();
@@ -28,13 +34,18 @@ export function UserManagement({ onClose }: UserManagementProps) {
   const loadUsers = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+
+      // Load users from users table
+      const { data: usersData } = await supabase
         .from('users')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setUsers(data || []);
+      setTableUsers(usersData || []);
+
+      // Try to load auth users (admin only can see this)
+      // Note: This requires admin API access - may need backend function
+      console.log('Loaded users from table:', usersData?.length);
     } catch (error) {
       console.error('Error loading users:', error);
     } finally {
@@ -42,84 +53,32 @@ export function UserManagement({ onClose }: UserManagementProps) {
     }
   };
 
-  const handleAddUser = async () => {
-    if (!formData.name || !formData.email || !formData.password) {
-      alert('Please fill in all fields');
-      return;
-    }
-
-    if (formData.password.length < 6) {
-      alert('Password must be at least 6 characters');
-      return;
-    }
-
+  const syncAuthUserToTable = async (authUserId: string, email: string, role: 'admin' | 'manager') => {
     try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-      });
-
-      if (authError) throw authError;
-
-      if (authData.user) {
-        const { error: userError } = await supabase.from('users').insert([
-          {
-            auth_user_id: authData.user.id,
-            name: formData.name,
-            email: formData.email,
-            role: formData.role,
-            is_active: true,
-          },
-        ]);
-
-        if (userError) throw userError;
-
-        setFormData({ name: '', email: '', password: '', role: 'staff' });
-        setShowAddForm(false);
-        await loadUsers();
-        alert('User added successfully! They can now log in with their email and password.');
-      }
-    } catch (error: any) {
-      console.error('Error adding user:', error);
-      alert(error.message || 'Failed to add user');
-    }
-  };
-
-  const handleDeleteUser = async (userId: string, userName: string) => {
-    if (userId === currentUser?.id) {
-      alert('You cannot delete yourself!');
-      return;
-    }
-
-    if (!confirm(`Are you sure you want to delete ${userName}? This will revoke their access immediately.`)) {
-      return;
-    }
-
-    try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('users')
-        .update({ is_active: false })
-        .eq('id', userId);
+        .insert({
+          auth_user_id: authUserId,
+          email: email,
+          name: email.split('@')[0],
+          role: role,
+          is_active: true,
+          theme_preference: 'dark',
+        })
+        .select()
+        .single();
 
       if (error) throw error;
-      await loadUsers();
-      alert('User deactivated successfully!');
-    } catch (error) {
-      console.error('Error deleting user:', error);
-      alert('Failed to delete user');
+
+      alert('✅ User synced successfully!');
+      loadUsers();
+    } catch (error: any) {
+      console.error('Error syncing user:', error);
+      alert('❌ Error: ' + error.message);
     }
   };
 
-  const handleChangeRole = async (userId: string, newRole: UserRole, userName: string) => {
-    if (userId === currentUser?.id) {
-      alert('You cannot change your own role!');
-      return;
-    }
-
-    if (!confirm(`Change ${userName}'s role to ${getRoleDisplayName(newRole)}?`)) {
-      return;
-    }
-
+  const updateUserRole = async (userId: string, newRole: 'admin' | 'manager') => {
     try {
       const { error } = await supabase
         .from('users')
@@ -127,200 +86,461 @@ export function UserManagement({ onClose }: UserManagementProps) {
         .eq('id', userId);
 
       if (error) throw error;
-      await loadUsers();
-      alert('Role updated successfully!');
-    } catch (error) {
+
+      alert('✅ Role updated successfully!');
+      loadUsers();
+    } catch (error: any) {
       console.error('Error updating role:', error);
-      alert('Failed to update role');
+      alert('❌ Error: ' + error.message);
     }
   };
 
-  if (!hasPermission('manage_users')) {
+  const toggleUserStatus = async (userId: string, currentStatus: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ is_active: !currentStatus })
+        .eq('id', userId);
+
+      if (error) throw error;
+
+      alert(`✅ User ${!currentStatus ? 'activated' : 'deactivated'} successfully!`);
+      loadUsers();
+    } catch (error: any) {
+      console.error('Error updating status:', error);
+      alert('❌ Error: ' + error.message);
+    }
+  };
+
+  const deleteUser = async (userId: string) => {
+    if (!confirm('Are you sure you want to delete this user?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', userId);
+
+      if (error) throw error;
+
+      alert('✅ User deleted successfully!');
+      loadUsers();
+    } catch (error: any) {
+      console.error('Error deleting user:', error);
+      alert('❌ Error: ' + error.message);
+    }
+  };
+
+  const createUser = async () => {
+    if (!newUserEmail || !newUserPassword) {
+      alert('❌ Please enter email and password');
+      return;
+    }
+
+    if (newUserPassword.length < 6) {
+      alert('❌ Password must be at least 6 characters');
+      return;
+    }
+
+    try {
+      setCreating(true);
+
+      // Check if user already exists in table
+      const { data: existing } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', newUserEmail)
+        .maybeSingle();
+
+      if (existing) {
+        alert('❌ A user with this email already exists.');
+        return;
+      }
+
+      // Attempt to create auth user
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: newUserEmail,
+        password: newUserPassword,
+        options: {
+          emailRedirectTo: undefined,
+          data: { name: newUserEmail.split('@')[0] }
+        }
+      });
+
+      // Handle email rate limit — create table record anyway so admin can finish in Supabase dashboard
+      if (authError) {
+        const isRateLimit = authError.message?.toLowerCase().includes('rate limit') ||
+          authError.message?.toLowerCase().includes('email rate');
+
+        if (isRateLimit) {
+          const { error: tableError } = await supabase
+            .from('users')
+            .insert({
+              email: newUserEmail,
+              name: newUserEmail.split('@')[0],
+              role: newUserRole,
+              is_active: false,
+              theme_preference: 'dark',
+            });
+
+          if (tableError) throw tableError;
+
+          alert(
+            '⚠️ Email rate limit reached — Supabase is throttling sign-up emails.\n\n' +
+            'The user record has been created in the database (inactive).\n\n' +
+            'To finish setup:\n' +
+            '1. Go to your Supabase dashboard → Authentication → Users\n' +
+            '2. Click "Add user" → "Create new user"\n' +
+            '3. Enter: ' + newUserEmail + ' / ' + newUserPassword + '\n' +
+            '4. Then come back here and activate the user.'
+          );
+
+          setShowCreateModal(false);
+          setNewUserEmail('');
+          setNewUserPassword('');
+          setNewUserRole('manager');
+          loadUsers();
+          return;
+        }
+
+        throw authError;
+      }
+
+      if (!authData.user) {
+        throw new Error('Failed to create auth user');
+      }
+
+      // Create user in users table linked to auth account
+      const { error: tableError } = await supabase
+        .from('users')
+        .insert({
+          auth_user_id: authData.user.id,
+          email: newUserEmail,
+          name: newUserEmail.split('@')[0],
+          role: newUserRole,
+          is_active: true,
+          theme_preference: 'dark',
+        });
+
+      if (tableError) throw tableError;
+
+      alert('✅ User created successfully!\n\n📧 Email: ' + newUserEmail + '\n🔑 Password: ' + newUserPassword);
+
+      setShowCreateModal(false);
+      setNewUserEmail('');
+      setNewUserPassword('');
+      setNewUserRole('manager');
+      loadUsers();
+    } catch (error: any) {
+      console.error('Error creating user:', error);
+      alert('❌ Error: ' + error.message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  if (currentUser?.role !== 'admin') {
     return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Access Denied</h2>
-          <p className="text-gray-600 dark:text-gray-400 mb-4">
-            You don't have permission to manage users.
-          </p>
-          <button
-            onClick={onClose}
-            className="w-full px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-          >
-            Close
-          </button>
-        </div>
+      <div className="p-4 text-center">
+        <Shield className="w-12 h-12 mx-auto mb-2 text-red-500" />
+        <p className="text-red-500">Admin access required</p>
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <UsersIcon className="w-5 h-5 text-amber-500" />
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">User Management</h2>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-          >
-            <X className="w-5 h-5 text-gray-500" />
-          </button>
-        </div>
-
-        <div className="p-6">
-          {/* Add User Button */}
-          <div className="mb-6">
+    <div className={`min-h-screen p-4 ${
+      theme === 'light' 
+        ? 'bg-gradient-to-br from-amber-50 via-yellow-50 to-orange-50' 
+        : 'bg-gradient-to-br from-black via-neutral-900 to-neutral-800'
+    }`}>
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className={`${
+          theme === 'light'
+            ? 'bg-white/80 border-amber-200'
+            : 'bg-neutral-900/80 border-neutral-700'
+        } backdrop-blur-sm rounded-lg border p-6 mb-6`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className={`text-2xl font-bold ${
+                theme === 'light' ? 'text-amber-800' : 'text-yellow-500'
+              }`}>
+                User Management
+              </h1>
+              <p className={theme === 'light' ? 'text-amber-600' : 'text-gray-400'}>
+                Manage user accounts and permissions
+              </p>
+            </div>
             <button
-              onClick={() => setShowAddForm(!showAddForm)}
-              className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors"
+              onClick={() => setShowCreateModal(true)}
+              className="bg-gradient-to-r from-amber-500 to-yellow-600 text-white px-4 py-2 rounded-lg hover:shadow-lg flex items-center gap-2"
             >
-              <Plus className="w-5 h-5" />
-              Add New User
+              <UserPlus className="w-4 h-4" />
+              Add User
             </button>
           </div>
+        </div>
 
-          {/* Add User Form */}
-          {showAddForm && (
-            <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
-              <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Add New User</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Full Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                    placeholder="e.g., John Doe"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Email *
-                  </label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                    placeholder="email@example.com"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Password *
-                  </label>
-                  <input
-                    type="password"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                    placeholder="Minimum 6 characters"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Role *
-                  </label>
-                  <select
-                    value={formData.role}
-                    onChange={(e) => setFormData({ ...formData, role: e.target.value as UserRole })}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                  >
-                    <option value="staff">Staff Member</option>
-                    <option value="manager">Hotel Manager</option>
-                    <option value="admin">Administrator</option>
-                  </select>
-                </div>
-              </div>
-              <div className="flex gap-2 mt-4">
-                <button
-                  onClick={handleAddUser}
-                  className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
-                >
-                  Create User
-                </button>
-                <button
-                  onClick={() => setShowAddForm(false)}
-                  className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
+        {/* Users Table */}
+        <div className={`${
+          theme === 'light'
+            ? 'bg-white/80 border-amber-200'
+            : 'bg-neutral-900/80 border-neutral-700'
+        } backdrop-blur-sm rounded-lg border overflow-hidden`}>
+          {loading ? (
+            <div className="p-8 text-center">
+              <p className={theme === 'light' ? 'text-amber-600' : 'text-gray-400'}>
+                Loading users...
+              </p>
+            </div>
+          ) : tableUsers.length === 0 ? (
+            <div className="p-8 text-center">
+              <UserPlus className={`w-12 h-12 mx-auto mb-2 ${
+                theme === 'light' ? 'text-amber-500' : 'text-gray-600'
+              }`} />
+              <p className={theme === 'light' ? 'text-amber-600' : 'text-gray-400'}>
+                No users found
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className={
+                  theme === 'light'
+                    ? 'bg-amber-100 border-b border-amber-200'
+                    : 'bg-neutral-800 border-b border-neutral-700'
+                }>
+                  <tr>
+                    <th className={`px-4 py-3 text-left text-sm font-semibold ${
+                      theme === 'light' ? 'text-amber-800' : 'text-gray-300'
+                    }`}>
+                      Email
+                    </th>
+                    <th className={`px-4 py-3 text-left text-sm font-semibold ${
+                      theme === 'light' ? 'text-amber-800' : 'text-gray-300'
+                    }`}>
+                      Name
+                    </th>
+                    <th className={`px-4 py-3 text-left text-sm font-semibold ${
+                      theme === 'light' ? 'text-amber-800' : 'text-gray-300'
+                    }`}>
+                      Role
+                    </th>
+                    <th className={`px-4 py-3 text-left text-sm font-semibold ${
+                      theme === 'light' ? 'text-amber-800' : 'text-gray-300'
+                    }`}>
+                      Status
+                    </th>
+                    <th className={`px-4 py-3 text-left text-sm font-semibold ${
+                      theme === 'light' ? 'text-amber-800' : 'text-gray-300'
+                    }`}>
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-700">
+                  {tableUsers.map((user) => (
+                    <tr key={user.id} className={
+                      theme === 'light'
+                        ? 'hover:bg-amber-50'
+                        : 'hover:bg-neutral-800/50'
+                    }>
+                      <td className={`px-4 py-3 ${
+                        theme === 'light' ? 'text-amber-900' : 'text-gray-300'
+                      }`}>
+                        {user.email}
+                      </td>
+                      <td className={`px-4 py-3 ${
+                        theme === 'light' ? 'text-amber-800' : 'text-gray-400'
+                      }`}>
+                        {user.name}
+                      </td>
+                      <td className="px-4 py-3">
+                        <select
+                          value={user.role}
+                          onChange={(e) => updateUserRole(user.id, e.target.value as any)}
+                          className={`px-3 py-1 rounded ${
+                            theme === 'light'
+                              ? 'bg-amber-100 text-amber-800 border-amber-300'
+                              : 'bg-neutral-700 text-yellow-500 border-neutral-600'
+                          } border`}
+                          disabled={user.id === currentUser.id}
+                        >
+                          <option value="admin">Admin</option>
+                          <option value="manager">Manager</option>
+                        </select>
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => toggleUserStatus(user.id, user.is_active)}
+                          className="flex items-center gap-1"
+                          disabled={user.id === currentUser.id}
+                        >
+                          {user.is_active ? (
+                            <>
+                              <CheckCircle className="w-4 h-4 text-green-500" />
+                              <span className="text-green-500 text-sm">Active</span>
+                            </>
+                          ) : (
+                            <>
+                              <XCircle className="w-4 h-4 text-red-500" />
+                              <span className="text-red-500 text-sm">Inactive</span>
+                            </>
+                          )}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => deleteUser(user.id)}
+                          disabled={user.id === currentUser.id}
+                          className={`p-1 rounded hover:bg-red-500/20 ${
+                            user.id === currentUser.id
+                              ? 'opacity-50 cursor-not-allowed'
+                              : ''
+                          }`}
+                        >
+                          <Trash2 className="w-4 h-4 text-red-500" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
+        </div>
 
-          {/* Users List */}
-          <div className="space-y-4">
-            <h3 className="font-semibold text-gray-900 dark:text-white">All Users ({users.length})</h3>
-            {loading ? (
-              <p className="text-gray-500">Loading...</p>
-            ) : users.length === 0 ? (
-              <p className="text-gray-500">No users found. Add your first user above!</p>
-            ) : (
-              <div className="grid grid-cols-1 gap-4">
-                {users.map((user) => (
-                  <div
-                    key={user.id}
-                    className={`p-4 border rounded-lg ${
-                      user.is_active
-                        ? 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700'
-                        : 'bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 opacity-60'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-semibold text-gray-900 dark:text-white">{user.name}</h4>
-                          {user.id === currentUser?.id && (
-                            <span className="px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">You</span>
-                          )}
-                          {!user.is_active && (
-                            <span className="px-2 py-1 rounded-full text-xs bg-gray-200 text-gray-800">Inactive</span>
-                          )}
-                        </div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{user.email}</p>
-                        <div className="flex items-center gap-2 mt-2">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getRoleBadgeColor(user.role)} text-white`}>
-                            {getRoleDisplayName(user.role)}
-                          </span>
-                          {user.role !== 'admin' && user.is_active && user.id !== currentUser?.id && (
-                            <select
-                              value={user.role}
-                              onChange={(e) => handleChangeRole(user.id, e.target.value as UserRole, user.name)}
-                              className="text-xs px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                            >
-                              <option value="staff">Staff</option>
-                              <option value="manager">Manager</option>
-                              <option value="admin">Admin</option>
-                            </select>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex gap-2 ml-4">
-                        {user.is_active && user.id !== currentUser?.id && (
-                          <button
-                            onClick={() => handleDeleteUser(user.id, user.name)}
-                            className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
-                            title="Deactivate user"
-                          >
-                            <Trash2 className="w-5 h-5" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+        {/* Instructions Card */}
+        <div className={`${
+          theme === 'light'
+            ? 'bg-amber-100/50 border-amber-300 text-amber-800'
+            : 'bg-neutral-800/50 border-yellow-500/20 text-gray-300'
+        } border rounded-lg p-4 mt-6`}>
+          <h3 className={`font-semibold mb-2 ${
+            theme === 'light' ? 'text-amber-900' : 'text-yellow-500'
+          }`}>
+            📝 How to Add New Users:
+          </h3>
+          <ol className="space-y-2 text-sm">
+            <li>
+              <strong>Step 1:</strong> Click "Add User" button above
+            </li>
+            <li>
+              <strong>Step 2:</strong> Enter email, password, and select role
+            </li>
+            <li>
+              <strong>Step 3:</strong> User can immediately login with those credentials!
+            </li>
+            <li className={theme === 'light' ? 'text-amber-700' : 'text-yellow-500'}>
+              <strong>Note:</strong> No email confirmation required - user works immediately!
+            </li>
+          </ol>
         </div>
       </div>
+
+      {/* Create User Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className={`${
+            theme === 'light'
+              ? 'bg-white border-amber-200'
+              : 'bg-neutral-900 border-neutral-700'
+          } rounded-lg border max-w-md w-full p-6`}>
+            <h2 className={`text-xl font-bold mb-4 ${
+              theme === 'light' ? 'text-amber-800' : 'text-yellow-500'
+            }`}>
+              Create New User
+            </h2>
+
+            <div className="space-y-4">
+              <div>
+                <label className={`block text-sm font-medium mb-1 ${
+                  theme === 'light' ? 'text-amber-700' : 'text-gray-300'
+                }`}>
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={newUserEmail}
+                  onChange={(e) => setNewUserEmail(e.target.value)}
+                  className={`w-full px-3 py-2 rounded border ${
+                    theme === 'light'
+                      ? 'bg-white border-amber-300 text-amber-900'
+                      : 'bg-neutral-800 border-neutral-600 text-white'
+                  }`}
+                  placeholder="user@example.com"
+                />
+              </div>
+
+              <div>
+                <label className={`block text-sm font-medium mb-1 ${
+                  theme === 'light' ? 'text-amber-700' : 'text-gray-300'
+                }`}>
+                  Password
+                </label>
+                <input
+                  type="password"
+                  value={newUserPassword}
+                  onChange={(e) => setNewUserPassword(e.target.value)}
+                  className={`w-full px-3 py-2 rounded border ${
+                    theme === 'light'
+                      ? 'bg-white border-amber-300 text-amber-900'
+                      : 'bg-neutral-800 border-neutral-600 text-white'
+                  }`}
+                  placeholder="Min 6 characters"
+                />
+              </div>
+
+              <div>
+                <label className={`block text-sm font-medium mb-1 ${
+                  theme === 'light' ? 'text-amber-700' : 'text-gray-300'
+                }`}>
+                  Role
+                </label>
+                <select
+                  value={newUserRole}
+                  onChange={(e) => setNewUserRole(e.target.value as any)}
+                  className={`w-full px-3 py-2 rounded border ${
+                    theme === 'light'
+                      ? 'bg-white border-amber-300 text-amber-900'
+                      : 'bg-neutral-800 border-neutral-600 text-white'
+                  }`}
+                >
+                  <option value="manager">Manager</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={createUser}
+                disabled={creating}
+                className="flex-1 bg-gradient-to-r from-amber-500 to-yellow-600 text-white px-4 py-2 rounded-lg hover:shadow-lg disabled:opacity-50"
+              >
+                {creating ? 'Creating...' : 'Create User'}
+              </button>
+              <button
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setNewUserEmail('');
+                  setNewUserPassword('');
+                  setNewUserRole('manager');
+                }}
+                disabled={creating}
+                className={`flex-1 px-4 py-2 rounded-lg border ${
+                  theme === 'light'
+                    ? 'border-amber-300 text-amber-800 hover:bg-amber-50'
+                    : 'border-neutral-600 text-gray-300 hover:bg-neutral-800'
+                }`}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

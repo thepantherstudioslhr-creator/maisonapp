@@ -13,8 +13,9 @@ import OfflineIndicator from './OfflineIndicator';
 import { Settings } from './Settings';
 import { SmartDashboard } from './SmartDashboard';
 import { GuestDatabase } from './GuestDatabase';
+import UserManagement from './UserManagement';
 
-type Tab = 'dashboard' | 'new-booking' | 'bookings' | 'reports' | 'calendar' | 'guests';
+type Tab = 'dashboard' | 'new-booking' | 'bookings' | 'reports' | 'calendar' | 'guests' | 'users';
 
 const Dashboard: React.FC = () => {
   const { user, logout, hasPermission, theme } = useAuth();
@@ -148,31 +149,36 @@ const Dashboard: React.FC = () => {
         return checkOut.getTime() === today.getTime();
       }).length || 0;
 
-      const todayActiveBookings = allBookings?.filter((booking) => {
-        const checkIn = new Date(booking.check_in);
-        checkIn.setHours(0, 0, 0, 0);
-        const checkOut = new Date(booking.check_out);
-        checkOut.setHours(0, 0, 0, 0);
+      // Calculate cash and online revenue - ONLY FROM BOOKINGS CREATED OR UPDATED TODAY
+      let cashRevenue = 0;
+      let onlineRevenue = 0;
 
-        return (
-          checkIn.getTime() <= today.getTime() &&
-          checkOut.getTime() >= today.getTime()
-        );
-      }) || [];
+      const todayTimestamp = today.getTime();
 
-      const todayRevenue = todayActiveBookings.reduce(
-        (sum, booking) => sum + (booking.price_per_night || 0),
-        0
-      );
+      allBookings?.forEach((booking) => {
+        const createdAt = new Date(booking.created_at);
+        createdAt.setHours(0, 0, 0, 0);
 
-      return { checkInsToday, checkOutsToday, todayRevenue };
+        // ONLY count bookings created today
+        const createdToday = createdAt.getTime() === todayTimestamp;
+
+        if (createdToday) {
+          cashRevenue += booking.cash_amount || 0;
+          onlineRevenue += booking.online_amount || 0;
+        }
+      });
+
+      // Total revenue = cash + online (ONLY from today's bookings)
+      const todayRevenue = cashRevenue + onlineRevenue;
+
+      return { checkInsToday, checkOutsToday, todayRevenue, cashRevenue, onlineRevenue };
     } catch (error) {
       console.error('Error getting today stats:', error);
-      return { checkInsToday: 0, checkOutsToday: 0, todayRevenue: 0 };
+      return { checkInsToday: 0, checkOutsToday: 0, todayRevenue: 0, cashRevenue: 0, onlineRevenue: 0 };
     }
   };
 
-  const [todayStats, setTodayStats] = React.useState({ checkInsToday: 0, checkOutsToday: 0, todayRevenue: 0 });
+  const [todayStats, setTodayStats] = React.useState({ checkInsToday: 0, checkOutsToday: 0, todayRevenue: 0, cashRevenue: 0, onlineRevenue: 0 });
 
   React.useEffect(() => {
     getTodayStats().then(setTodayStats);
@@ -276,6 +282,7 @@ const Dashboard: React.FC = () => {
               { id: 'reports', label: 'Reports', icon: '📊' },
               { id: 'guests', label: 'Guests', icon: '👥' },
               { id: 'calendar', label: 'Calendar', icon: '📅' },
+              { id: 'users', label: 'Users', icon: '🔑' },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -308,6 +315,8 @@ const Dashboard: React.FC = () => {
               availableRooms={stats.available}
               totalRooms={apartments.length}
               todayRevenue={todayStats.todayRevenue}
+              cashRevenue={todayStats.cashRevenue}
+              onlineRevenue={todayStats.onlineRevenue}
               occupancyRate={stats.occupancyRate}
             />
 
@@ -547,6 +556,7 @@ const Dashboard: React.FC = () => {
         {activeTab === 'reports' && <Reports />}
         {activeTab === 'guests' && <GuestDatabase />}
         {activeTab === 'calendar' && <CalendarView />}
+        {activeTab === 'users' && <UserManagement />}
       </div>
 
       {/* Booking Form Modal */}
