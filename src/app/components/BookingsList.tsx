@@ -4,12 +4,14 @@ import { Booking, BookingStatus, APARTMENTS } from '../types';
 import { format } from 'date-fns';
 import { Edit } from 'lucide-react';
 import EditBookingModal from './EditBookingModal';
+import { useAuth } from '../contexts/AuthContext';
 
 interface BookingsListProps {
   onBookingUpdated: () => void;
 }
 
 const BookingsList: React.FC<BookingsListProps> = ({ onBookingUpdated }) => {
+  const { hasPermission } = useAuth();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [filter, setFilter] = useState<BookingStatus | 'all'>('active');
   const [searchTerm, setSearchTerm] = useState('');
@@ -187,14 +189,16 @@ const BookingsList: React.FC<BookingsListProps> = ({ onBookingUpdated }) => {
               </div>
 
               <div className="flex gap-2 flex-wrap">
-                {/* Edit button for ALL booking statuses */}
-                <button
-                  onClick={() => setEditingBooking(booking)}
-                  className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded text-sm transition-colors flex items-center gap-2"
-                >
-                  <Edit className="w-4 h-4" />
-                  Edit
-                </button>
+                {/* Edit button — admin only */}
+                {hasPermission('edit_booking') && (
+                  <button
+                    onClick={() => setEditingBooking(booking)}
+                    className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded text-sm transition-colors flex items-center gap-2"
+                  >
+                    <Edit className="w-4 h-4" />
+                    Edit
+                  </button>
+                )}
 
                 {/* Action buttons for active bookings */}
                 {booking.status === 'active' && (
@@ -214,13 +218,15 @@ const BookingsList: React.FC<BookingsListProps> = ({ onBookingUpdated }) => {
                   </>
                 )}
 
-                {/* Delete button for all */}
-                <button
-                  onClick={() => handleDelete(booking.id)}
-                  className="bg-neutral-800 hover:bg-neutral-700 text-red-400 px-4 py-2 rounded text-sm transition-colors ml-auto"
-                >
-                  Delete
-                </button>
+                {/* Delete button — admin only */}
+                {hasPermission('delete_booking') && (
+                  <button
+                    onClick={() => handleDelete(booking.id)}
+                    className="bg-neutral-800 hover:bg-neutral-700 text-red-400 px-4 py-2 rounded text-sm transition-colors ml-auto"
+                  >
+                    Delete
+                  </button>
+                )}
               </div>
             </div>
           ))}

@@ -276,14 +276,14 @@ const Dashboard: React.FC = () => {
         }`}>
           <div className="flex gap-1 min-w-max">
             {[
-              { id: 'dashboard', label: 'Dashboard', icon: '🏠' },
-              { id: 'new-booking', label: 'New Booking', icon: '➕' },
-              { id: 'bookings', label: 'Bookings', icon: '📋' },
-              { id: 'reports', label: 'Reports', icon: '📊' },
-              { id: 'guests', label: 'Guests', icon: '👥' },
-              { id: 'calendar', label: 'Calendar', icon: '📅' },
-              { id: 'users', label: 'Users', icon: '🔑' },
-            ].map((tab) => (
+              { id: 'dashboard', label: 'Dashboard', icon: '🏠', permission: null },
+              { id: 'new-booking', label: 'New Booking', icon: '➕', permission: null },
+              { id: 'bookings', label: 'Bookings', icon: '📋', permission: null },
+              { id: 'reports', label: 'Reports', icon: '📊', permission: 'view_reports' as const },
+              { id: 'guests', label: 'Guests', icon: '👥', permission: 'view_guests' as const },
+              { id: 'calendar', label: 'Calendar', icon: '📅', permission: null },
+              { id: 'users', label: 'Users', icon: '🔑', permission: 'manage_users' as const },
+            ].filter((tab) => tab.permission === null || hasPermission(tab.permission)).map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as Tab)}

@@ -10,6 +10,7 @@ export type PermissionType =
   | 'remove_room'
   | 'view_reports'
   | 'view_analytics'
+  | 'view_guests'
   | 'manage_users'
   | 'access_settings'
   | 'change_theme'
@@ -27,6 +28,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Record<PermissionType, boolean>> = {
     remove_room: true,
     view_reports: true,
     view_analytics: true,
+    view_guests: true,
     manage_users: true,
     access_settings: true,
     change_theme: true,
@@ -36,18 +38,19 @@ const ROLE_PERMISSIONS: Record<UserRole, Record<PermissionType, boolean>> = {
   manager: {
     view_dashboard: true,
     create_booking: true,
-    edit_booking: true,
+    edit_booking: false,
     delete_booking: false,
     checkout_booking: true,
     add_room: false,
     remove_room: false,
-    view_reports: true,
-    view_analytics: true,
+    view_reports: false,
+    view_analytics: false,
+    view_guests: false,
     manage_users: false,
     access_settings: false,
     change_theme: false,
     view_financial_reports: false,
-    export_data: true,
+    export_data: false,
   },
   staff: {
     view_dashboard: true,
@@ -59,6 +62,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Record<PermissionType, boolean>> = {
     remove_room: false,
     view_reports: false,
     view_analytics: false,
+    view_guests: false,
     manage_users: false,
     access_settings: false,
     change_theme: true,
