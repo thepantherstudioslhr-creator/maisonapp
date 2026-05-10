@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../utils/supabase';
 import { Booking, APARTMENTS } from '../types';
 import { format } from 'date-fns';
+import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
+import { ReceiptContent } from './ReceiptContent';
 import logoImage from '../../imports/555031729_122102984955033682_4637142757421852213_n.jpg';
 
 interface ReceiptGeneratorProps {
@@ -13,10 +15,39 @@ interface ReceiptGeneratorProps {
 const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({ bookingId, onClose }) => {
   const [booking, setBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(true);
+  const [logoBase64, setLogoBase64] = useState<string>('');
+  const receiptRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadBooking();
+    loadLogoAsBase64();
   }, [bookingId]);
+
+  const loadLogoAsBase64 = () => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          const dataURL = canvas.toDataURL('image/png');
+          setLogoBase64(dataURL);
+          console.log('Logo converted to base64 successfully');
+        }
+      } catch (error) {
+        console.error('Error converting logo to base64:', error);
+        setLogoBase64(logoImage);
+      }
+    };
+    img.onerror = (error) => {
+      console.error('Failed to load logo image:', error);
+      setLogoBase64(logoImage);
+    };
+    img.src = logoImage;
+  };
 
   const loadBooking = async () => {
     try {
@@ -40,112 +71,126 @@ const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({ bookingId, onClose 
     }
   };
 
-  const downloadPDF = () => {
-    if (!booking) return;
+  const downloadPDF = async () => {
+    if (!booking || !receiptRef.current) return;
 
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
+    try {
+      const element = receiptRef.current;
 
-    doc.setFillColor(139, 0, 0);
-    doc.rect(0, 0, pageWidth, 40, 'F');
+      // Wait for logo base64 to be ready
+      if (!logoBase64) {
+        alert('Logo is still loading. Please try again in a moment.');
+        return;
+      }
 
-    doc.setTextColor(255, 215, 0);
-    doc.setFontSize(24);
-    doc.text('MAISON ROYALE', pageWidth / 2, 20, { align: 'center' });
-    doc.setFontSize(14);
-    doc.text('RESIDENCY', pageWidth / 2, 30, { align: 'center' });
+      // Wait for images to load
+      const images = element.getElementsByTagName('img');
+      await Promise.all(
+        Array.from(images).map((img) => {
+          if (img.complete) return Promise.resolve();
+          return new Promise((resolve) => {
+            img.onload = resolve;
+            img.onerror = resolve;
+          });
+        })
+      );
 
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(18);
-    doc.text('Booking Receipt', pageWidth / 2, 55, { align: 'center' });
+      // Longer delay to ensure rendering and base64 images are complete
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-    doc.setFontSize(10);
-    let y = 75;
+      // Capture the element as canvas with high quality
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: false,
+        allowTaint: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight,
+        imageTimeout: 0,
+        onclone: (clonedDoc) => {
+          // Ensure all images in the cloned document use base64
+          const clonedImages = clonedDoc.getElementsByTagName('img');
+          Array.from(clonedImages).forEach((img) => {
+            if (img.src.includes('555031729')) {
+              img.src = logoBase64;
+            }
+          });
+        },
+      });
 
-    doc.text(`Booking ID: ${booking.id.substring(0, 8).toUpperCase()}`, 20, y);
-    y += 7;
-    doc.text(`Date: ${format(new Date(booking.created_at), 'MMM dd, yyyy')}`, 20, y);
-    y += 15;
+      // A4 dimensions in mm
+      const pdfWidth = 210;
+      const pdfHeight = 297;
+      const margin = 10; // 10mm margins on all sides
 
-    doc.setFontSize(12);
-    doc.text('Client Details:', 20, y);
-    y += 7;
-    doc.setFontSize(10);
-    doc.text(`Name: ${booking.client_name}`, 25, y);
-    y += 7;
-    doc.text(`Phone: ${booking.phone}`, 25, y);
-    y += 7;
-    doc.text(`CNIC: ${booking.cnic}`, 25, y);
-    y += 7;
-    doc.text(`Guests: ${booking.guests}`, 25, y);
-    y += 15;
+      // Available space after margins
+      const availableWidth = pdfWidth - (margin * 2);
+      const availableHeight = pdfHeight - (margin * 2);
 
-    doc.setFontSize(12);
-    doc.text('Booking Details:', 20, y);
-    y += 7;
-    doc.setFontSize(10);
-    doc.text(`Apartment: ${booking.apartment_name}`, 25, y);
-    y += 7;
-    doc.text(`Check-In: ${format(new Date(booking.check_in), 'MMM dd, yyyy')}`, 25, y);
-    y += 7;
-    doc.text(`Check-Out: ${format(new Date(booking.check_out), 'MMM dd, yyyy')}`, 25, y);
-    y += 7;
-    doc.text(`Total Nights: ${booking.nights}`, 25, y);
-    y += 15;
+      // Calculate image dimensions in mm (assuming 96 DPI)
+      const imgWidthMM = (canvas.width / 96) * 25.4;
+      const imgHeightMM = (canvas.height / 96) * 25.4;
 
-    doc.setFontSize(12);
-    doc.text('Payment Details:', 20, y);
-    y += 7;
-    doc.setFontSize(10);
-    doc.text(`Price per Night: Rs ${booking.price_per_night.toLocaleString()}`, 25, y);
-    y += 7;
-    doc.text(`Subtotal: Rs ${(booking.nights * booking.price_per_night).toLocaleString()}`, 25, y);
-    y += 7;
-    doc.text(`Discount: Rs ${booking.discount.toLocaleString()}`, 25, y);
-    y += 7;
-    doc.text(`Extra Charges: Rs ${booking.extra_charges.toLocaleString()}`, 25, y);
-    y += 7;
-    doc.setFontSize(12);
-    doc.text(`Total Amount: Rs ${booking.total_amount.toLocaleString()}`, 25, y);
-    y += 7;
-    doc.text(`Paid: Rs ${booking.advance_payment.toLocaleString()}`, 25, y);
-    y += 7;
-    doc.setFontSize(10);
-    doc.setTextColor(0, 0, 0);
-    doc.text(`Payment Method: ${booking.payment_method === 'cash' ? 'Cash' : 'Online'}`, 25, y);
-    y += 7;
-    doc.setFontSize(12);
-    doc.setTextColor(255, 0, 0);
-    doc.text(`Balance: Rs ${booking.balance.toLocaleString()}`, 25, y);
+      // Calculate scale to fit within available space while maintaining aspect ratio
+      const scaleX = availableWidth / imgWidthMM;
+      const scaleY = availableHeight / imgHeightMM;
+      const scale = Math.min(scaleX, scaleY);
 
-    doc.setTextColor(128, 128, 128);
-    doc.setFontSize(8);
-    doc.text('Thank you for choosing Maison Royale Residency', pageWidth / 2, 280, {
-      align: 'center',
-    });
+      // Final dimensions maintaining aspect ratio
+      const finalWidth = imgWidthMM * scale;
+      const finalHeight = imgHeightMM * scale;
 
-    doc.save(`Receipt-${booking.id.substring(0, 8)}.pdf`);
+      // Center the image on the page
+      const xOffset = margin + (availableWidth - finalWidth) / 2;
+      const yOffset = margin + (availableHeight - finalHeight) / 2;
+
+      // Create PDF
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const imgData = canvas.toDataURL('image/png', 1.0);
+
+      // Add image maintaining aspect ratio
+      pdf.addImage(imgData, 'PNG', xOffset, yOffset, finalWidth, finalHeight);
+      pdf.save(`Maison-Royale-Receipt-${booking.id.substring(0, 8)}.pdf`);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Failed to generate PDF. Please try again.');
+    }
   };
 
   const shareWhatsApp = () => {
     if (!booking) return;
 
-    const message = `*MAISON ROYALE RESIDENCY*
-*Booking Confirmation*
+    const cashPart = booking.cash_amount && booking.cash_amount > 0 ? `\n💵 Cash: Rs ${booking.cash_amount.toLocaleString()}` : '';
+    const onlinePart = booking.online_amount && booking.online_amount > 0 ? `\n💳 Online: Rs ${booking.online_amount.toLocaleString()}` : '';
+    const discountPart = booking.discount > 0 ? `\n🎁 Discount: -Rs ${booking.discount.toLocaleString()}` : '';
 
-Booking ID: ${booking.id.substring(0, 8).toUpperCase()}
-Client: ${booking.client_name}
-Apartment: ${booking.apartment_name}
-Check-In: ${format(new Date(booking.check_in), 'MMM dd, yyyy')}
-Check-Out: ${format(new Date(booking.check_out), 'MMM dd, yyyy')}
-Nights: ${booking.nights}
+    const message = `✨ *MAISON ROYALE RESIDENCY* ✨
+━━━━━━━━━━━━━━━━━━━━━
+*🎊 BOOKING CONFIRMED 🎊*
 
-Total Amount: Rs ${booking.total_amount.toLocaleString()}
-Paid: Rs ${booking.advance_payment.toLocaleString()}
-Payment Method: ${booking.payment_method === 'cash' ? '💵 Cash' : '💳 Online'}
-Balance: Rs ${booking.balance.toLocaleString()}
+📋 *Booking Details:*
+🆔 ID: ${booking.id.substring(0, 8).toUpperCase()}
+👤 Client: ${booking.client_name}
+📱 Phone: ${booking.phone}
+🏨 Apartment: ${booking.apartment_name}
 
-Thank you for booking with us!`;
+📅 *Stay Duration:*
+📥 Check-In: ${format(new Date(booking.check_in), 'MMM dd, yyyy')}
+📤 Check-Out: ${format(new Date(booking.check_out), 'MMM dd, yyyy')}
+🌙 Nights: ${booking.nights}
+
+💰 *Payment Breakdown:*
+💵 Price/Night: Rs ${booking.price_per_night.toLocaleString()}
+📊 Subtotal (${booking.nights}×${booking.price_per_night.toLocaleString()}): Rs ${(booking.nights * booking.price_per_night).toLocaleString()}${discountPart}
+━━━━━━━━━━━━━━━━━━━━━
+✅ *Total Amount: Rs ${booking.total_amount.toLocaleString()}*${cashPart}${onlinePart}
+━━━━━━━━━━━━━━━━━━━━━
+💚 Paid: Rs ${booking.advance_payment.toLocaleString()}
+${booking.balance > 0 ? `⚠️ Balance Due: Rs ${booking.balance.toLocaleString()}` : '✅ Fully Paid - Thank You!'}
+
+🌟 _Thank you for choosing Maison Royale Residency!_
+We look forward to hosting you! 🏰`;
 
     const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
@@ -192,128 +237,8 @@ Thank you for booking with us!`;
         </div>
 
         {/* Receipt */}
-        <div className="p-8 bg-white text-black">
-          {/* Logo Header */}
-          <div className="text-center mb-8 pb-6 border-b-2 border-yellow-600">
-            <img
-              src={logoImage}
-              alt="Maison Royale"
-              className="w-32 h-32 mx-auto mb-4"
-            />
-            <h1 className="text-3xl text-yellow-700 mb-1">MAISON ROYALE RESIDENCY</h1>
-            <p className="text-neutral-600">Booking Receipt</p>
-          </div>
-
-          {/* Booking Info */}
-          <div className="grid grid-cols-2 gap-8 mb-8">
-            <div>
-              <p className="text-sm text-neutral-600 mb-1">Booking ID</p>
-              <p className="font-semibold">{booking.id.substring(0, 8).toUpperCase()}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-sm text-neutral-600 mb-1">Date</p>
-              <p className="font-semibold">{format(new Date(booking.created_at), 'MMM dd, yyyy')}</p>
-            </div>
-          </div>
-
-          {/* Client Details */}
-          <div className="mb-8">
-            <h3 className="text-yellow-700 mb-3">Client Details</h3>
-            <div className="bg-neutral-50 p-4 rounded">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-neutral-600">Name</p>
-                  <p className="font-semibold">{booking.client_name}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-neutral-600">Phone</p>
-                  <p className="font-semibold">{booking.phone}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-neutral-600">CNIC</p>
-                  <p className="font-semibold">{booking.cnic}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-neutral-600">Guests</p>
-                  <p className="font-semibold">{booking.guests}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Booking Details */}
-          <div className="mb-8">
-            <h3 className="text-yellow-700 mb-3">Booking Details</h3>
-            <div className="bg-neutral-50 p-4 rounded">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-neutral-600">Apartment</p>
-                  <p className="font-semibold">{booking.apartment_name}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-neutral-600">Total Nights</p>
-                  <p className="font-semibold">{booking.nights}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-neutral-600">Check-In</p>
-                  <p className="font-semibold">{format(new Date(booking.check_in), 'MMM dd, yyyy')}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-neutral-600">Check-Out</p>
-                  <p className="font-semibold">{format(new Date(booking.check_out), 'MMM dd, yyyy')}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Payment Summary */}
-          <div className="bg-yellow-50 border-2 border-yellow-600 p-6 rounded">
-            <h3 className="text-yellow-700 mb-4">Payment Summary</h3>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-neutral-600">
-                  Price per Night × {booking.nights} nights
-                </span>
-                <span>Rs {(booking.nights * booking.price_per_night).toLocaleString()}</span>
-              </div>
-              {booking.discount > 0 && (
-                <div className="flex justify-between text-red-600">
-                  <span>Discount</span>
-                  <span>- Rs {booking.discount.toLocaleString()}</span>
-                </div>
-              )}
-              {booking.extra_charges > 0 && (
-                <div className="flex justify-between text-green-600">
-                  <span>Extra Charges</span>
-                  <span>+ Rs {booking.extra_charges.toLocaleString()}</span>
-                </div>
-              )}
-              <div className="border-t-2 border-yellow-600 pt-2 mt-2 flex justify-between text-lg">
-                <span className="font-semibold">Total Amount</span>
-                <span className="font-semibold">Rs {booking.total_amount.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between text-green-600">
-                <span>Paid</span>
-                <span>Rs {booking.advance_payment.toLocaleString()}</span>
-              </div>
-              {booking.payment_method && (
-                <div className="flex justify-between">
-                  <span className="text-neutral-600">Payment Method</span>
-                  <span className={booking.payment_method === 'cash' ? 'text-emerald-600 font-semibold' : 'text-blue-600 font-semibold'}>
-                    {booking.payment_method === 'cash' ? '💵 Cash' : '💳 Online'}
-                  </span>
-                </div>
-              )}
-              <div className="border-t-2 border-yellow-600 pt-2 mt-2 flex justify-between text-xl">
-                <span className="font-semibold text-red-600">Balance Due</span>
-                <span className="font-semibold text-red-600">Rs {booking.balance.toLocaleString()}</span>
-              </div>
-            </div>
-          </div>
-
-          <p className="text-center text-neutral-500 text-sm mt-8">
-            Thank you for choosing Maison Royale Residency
-          </p>
+        <div ref={receiptRef} style={{ backgroundColor: '#ffffff', color: '#000000', maxWidth: '800px', margin: '0 auto' }}>
+          <ReceiptContent booking={booking} logoSrc={logoBase64} />
         </div>
 
         {/* Actions */}

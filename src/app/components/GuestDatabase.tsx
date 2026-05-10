@@ -1,17 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase';
 import { Guest } from '../types';
-import { format } from 'date-fns';
-import { Users, Star, Calendar, DollarSign, Phone, Mail, MapPin, Plus, Trash2, X, Edit } from 'lucide-react';
+import { format, subDays, startOfMonth, endOfMonth } from 'date-fns';
+import { Users, Star, Calendar, DollarSign, Phone, Mail, MapPin, Plus, Trash2, X, Edit, Info } from 'lucide-react';
 import EditGuestModal from './EditGuestModal';
+import GuestDetailsModal from './GuestDetailsModal';
+
+type DateFilter = 'last7' | 'last30' | 'last90' | 'lifetime' | 'month';
 
 export function GuestDatabase() {
   const [guests, setGuests] = useState<Guest[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'bookings' | 'spent' | 'lastVisit'>('bookings');
+  const [dateFilter, setDateFilter] = useState<DateFilter>('lifetime');
+  const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingGuest, setEditingGuest] = useState<Guest | null>(null);
+  const [viewingGuest, setViewingGuest] = useState<Guest | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -23,18 +29,109 @@ export function GuestDatabase() {
 
   useEffect(() => {
     loadGuests();
-  }, []);
+  }, [dateFilter, selectedMonth]);
+
+  const getDateRange = () => {
+    const now = new Date();
+    switch (dateFilter) {
+      case 'last7':
+        return { start: subDays(now, 7), end: now };
+      case 'last30':
+        return { start: subDays(now, 30), end: now };
+      case 'last90':
+        return { start: subDays(now, 90), end: now };
+      case 'lifetime':
+        return { start: new Date(2000, 0, 1), end: now };
+      case 'month':
+        return { start: startOfMonth(new Date(selectedMonth + '-01')), end: endOfMonth(new Date(selectedMonth + '-01')) };
+    }
+  };
 
   const loadGuests = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+
+      // Get all guests
+      const { data: allGuests, error: guestsError } = await supabase
         .from('guests')
         .select('*')
         .order('total_bookings', { ascending: false });
 
-      if (error) throw error;
-      setGuests(data || []);
+      if (guestsError) throw guestsError;
+
+      // Get all bookings for filtering (only completed and active bookings to avoid counting upcoming/cancelled)
+      const { data: allBookings, error: bookingsError } = await supabase
+        .from('bookings')
+        .select('*')
+        .in('status', ['completed', 'active']);
+
+      if (bookingsError) throw bookingsError;
+
+      // Filter bookings by date range using check_in date
+      const dateRange = getDateRange();
+      const filteredBookings = allBookings?.filter((b) => {
+        const checkIn = new Date(b.check_in);
+        return checkIn >= dateRange.start && checkIn <= dateRange.end;
+      }) || [];
+
+      // Calculate guest stats based on filtered bookings
+      const guestStats = new Map<string, { bookings: number; spent: number; lastVisit: string }>();
+
+      filteredBookings.forEach((booking) => {
+        if (booking.guest_id) {
+          const existing = guestStats.get(booking.guest_id) || { bookings: 0, spent: 0, lastVisit: '' };
+          // Each booking counts as 1 booking regardless of nights
+          guestStats.set(booking.guest_id, {
+            bookings: existing.bookings + 1,
+            spent: existing.spent + booking.total_amount,
+            lastVisit: !existing.lastVisit || booking.check_in > existing.lastVisit ? booking.check_in : existing.lastVisit,
+          });
+        }
+      });
+
+      // Update guest data with filtered stats
+      const guestsWithFilteredStats = (allGuests || []).map((guest) => {
+        const stats = guestStats.get(guest.id);
+        if (dateFilter === 'lifetime') {
+          // For lifetime, recalculate from all bookings to ensure consistency
+          const guestBookings = allBookings?.filter((b) => b.guest_id === guest.id) || [];
+          const totalBookings = guestBookings.length;
+          const totalSpent = guestBookings.reduce((sum, b) => sum + b.total_amount, 0);
+          const lastVisit = guestBookings.length > 0
+            ? guestBookings.reduce((latest, b) => b.check_in > latest ? b.check_in : latest, guestBookings[0].check_in)
+            : guest.last_visit_date;
+
+          return {
+            ...guest,
+            total_bookings: totalBookings,
+            total_spent: totalSpent,
+            last_visit_date: lastVisit,
+          };
+        } else if (stats) {
+          // For filtered dates, use calculated stats
+          return {
+            ...guest,
+            total_bookings: stats.bookings,
+            total_spent: stats.spent,
+            last_visit_date: stats.lastVisit,
+          };
+        } else {
+          // Guest has no bookings in this period
+          return {
+            ...guest,
+            total_bookings: 0,
+            total_spent: 0,
+            last_visit_date: null,
+          };
+        }
+      });
+
+      // Filter out guests with no activity in the selected period (except for lifetime)
+      const activeGuests = dateFilter === 'lifetime'
+        ? guestsWithFilteredStats
+        : guestsWithFilteredStats.filter((g) => g.total_bookings > 0);
+
+      setGuests(activeGuests);
     } catch (error) {
       console.error('Error loading guests:', error);
     } finally {
@@ -282,6 +379,55 @@ export function GuestDatabase() {
         </div>
       )}
 
+      {/* Date Filter Controls */}
+      <div className="space-y-4 mb-6">
+        <div className="flex gap-3 flex-wrap items-center">
+          <label className="text-neutral-400 text-sm font-medium">Date Range:</label>
+          <div className="flex gap-2 flex-wrap">
+            {([
+              { value: 'last7', label: 'Last 7 Days' },
+              { value: 'last30', label: 'Last 30 Days' },
+              { value: 'last90', label: 'Last 90 Days' },
+              { value: 'lifetime', label: 'Lifetime' },
+              { value: 'month', label: 'Per Month' },
+            ] as const).map((option) => (
+              <button
+                key={option.value}
+                onClick={() => setDateFilter(option.value)}
+                className={`px-3 py-1.5 rounded text-sm transition-colors ${
+                  dateFilter === option.value
+                    ? 'bg-purple-600 text-white font-semibold'
+                    : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          {dateFilter === 'month' && (
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="px-4 py-2 bg-neutral-800 border border-neutral-700 rounded text-white focus:outline-none focus:border-purple-500"
+            />
+          )}
+        </div>
+
+        {/* Active Filter Display */}
+        <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg px-4 py-2">
+          <p className="text-purple-400 text-sm">
+            <span className="font-semibold">Showing:</span>{' '}
+            {dateFilter === 'last7' && 'Guests from last 7 days'}
+            {dateFilter === 'last30' && 'Guests from last 30 days'}
+            {dateFilter === 'last90' && 'Guests from last 90 days'}
+            {dateFilter === 'lifetime' && 'All guests'}
+            {dateFilter === 'month' && `Guests from ${format(new Date(selectedMonth + '-01'), 'MMMM yyyy')}`}
+            {' '}({totalGuests} total)
+          </p>
+        </div>
+      </div>
+
       {/* Search and Sort Controls */}
       <div className="flex gap-4 mb-6 flex-wrap">
         <input
@@ -325,16 +471,26 @@ export function GuestDatabase() {
                   <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-yellow-600 rounded-full flex items-center justify-center text-white font-bold text-xl">
                     {guest.name.charAt(0).toUpperCase()}
                   </div>
-                  <div>
-                    <h3 className="text-white font-semibold text-lg flex items-center gap-2">
-                      {guest.name}
-                      {guest.is_vip && (
-                        <span className="px-2 py-1 bg-amber-500/20 text-amber-400 text-xs rounded-full flex items-center gap-1">
-                          <Star className="w-3 h-3" />
-                          VIP
-                        </span>
-                      )}
-                    </h3>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-white font-semibold text-lg flex items-center gap-2">
+                        {guest.name}
+                        {guest.is_vip && (
+                          <span className="px-2 py-1 bg-amber-500/20 text-amber-400 text-xs rounded-full flex items-center gap-1">
+                            <Star className="w-3 h-3" />
+                            VIP
+                          </span>
+                        )}
+                      </h3>
+                      <button
+                        onClick={() => setViewingGuest(guest)}
+                        className="px-3 py-1 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 text-xs rounded-lg transition-colors flex items-center gap-1 font-medium"
+                        title="View details"
+                      >
+                        <Info className="w-3 h-3" />
+                        Details
+                      </button>
+                    </div>
                     <p className="text-neutral-400 text-sm flex items-center gap-1">
                       <Phone className="w-3 h-3" />
                       {guest.phone}
@@ -419,6 +575,14 @@ export function GuestDatabase() {
           guest={editingGuest}
           onClose={() => setEditingGuest(null)}
           onUpdate={handleEditComplete}
+        />
+      )}
+
+      {/* Guest Details Modal */}
+      {viewingGuest && (
+        <GuestDetailsModal
+          guest={viewingGuest}
+          onClose={() => setViewingGuest(null)}
         />
       )}
     </div>

@@ -1,23 +1,48 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase';
 import { Booking, APARTMENTS } from '../types';
-import { format, startOfMonth, endOfMonth, startOfDay, endOfDay, startOfWeek, endOfWeek } from 'date-fns';
+import { format, startOfMonth, endOfMonth, startOfDay, endOfDay, startOfWeek, endOfWeek, subDays } from 'date-fns';
 import * as XLSX from 'xlsx';
+
+type DateFilter = 'last7' | 'last30' | 'last90' | 'lifetime' | 'month' | 'custom';
 
 const Reports: React.FC = () => {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [reportType, setReportType] = useState<'daily' | 'weekly' | 'monthly' | 'apartment' | 'detailed'>('monthly');
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [dateFilter, setDateFilter] = useState<DateFilter>('month');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadBookings();
-  }, [reportType, selectedDate]);
+  }, [reportType, selectedDate, dateFilter]);
+
+  const getDateRange = () => {
+    const now = new Date();
+    switch (dateFilter) {
+      case 'last7':
+        return { start: subDays(now, 7), end: now };
+      case 'last30':
+        return { start: subDays(now, 30), end: now };
+      case 'last90':
+        return { start: subDays(now, 90), end: now };
+      case 'lifetime':
+        return { start: new Date(2000, 0, 1), end: now };
+      case 'month':
+        return { start: startOfMonth(new Date(selectedDate)), end: endOfMonth(new Date(selectedDate)) };
+      case 'custom':
+        return { start: startOfDay(new Date(selectedDate)), end: endOfDay(new Date(selectedDate)) };
+    }
+  };
 
   const loadBookings = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase.from('bookings').select('*');
+      // Only get completed and active bookings to avoid counting cancelled/upcoming bookings
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('*')
+        .in('status', ['completed', 'active']);
 
       if (error) throw error;
 
@@ -29,7 +54,14 @@ const Reports: React.FC = () => {
         };
       });
 
-      setBookings(bookingsWithApartments);
+      // Filter bookings by date range using check_in date (same as Guest tab for consistency)
+      const dateRange = getDateRange();
+      const filtered = bookingsWithApartments.filter((b) => {
+        const checkIn = new Date(b.check_in);
+        return checkIn >= dateRange.start && checkIn <= dateRange.end;
+      });
+
+      setBookings(filtered);
     } catch (error) {
       console.error('Error loading bookings:', error);
     } finally {
@@ -321,7 +353,8 @@ const Reports: React.FC = () => {
       </div>
 
       {/* Controls */}
-      <div className="flex gap-4 mb-6 flex-wrap">
+      <div className="space-y-4 mb-6">
+        {/* Report Type Filters */}
         <div className="flex gap-2 flex-wrap">
           {(['daily', 'weekly', 'monthly', 'apartment', 'detailed'] as const).map((type) => (
             <button
@@ -337,14 +370,53 @@ const Reports: React.FC = () => {
             </button>
           ))}
         </div>
-        {reportType !== 'apartment' && reportType !== 'detailed' && (
-          <input
-            type={reportType === 'daily' || reportType === 'weekly' ? 'date' : 'month'}
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="px-4 py-2 bg-neutral-800 border border-neutral-700 rounded text-white focus:outline-none focus:border-yellow-500"
-          />
-        )}
+
+        {/* Date Range Filters */}
+        <div className="flex gap-3 flex-wrap items-center">
+          <label className="text-neutral-400 text-sm font-medium">Date Range:</label>
+          <div className="flex gap-2 flex-wrap">
+            {([
+              { value: 'last7', label: 'Last 7 Days' },
+              { value: 'last30', label: 'Last 30 Days' },
+              { value: 'last90', label: 'Last 90 Days' },
+              { value: 'lifetime', label: 'Lifetime' },
+              { value: 'month', label: 'Per Month' },
+            ] as const).map((option) => (
+              <button
+                key={option.value}
+                onClick={() => setDateFilter(option.value)}
+                className={`px-3 py-1.5 rounded text-sm transition-colors ${
+                  dateFilter === option.value
+                    ? 'bg-blue-600 text-white font-semibold'
+                    : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          {dateFilter === 'month' && (
+            <input
+              type="month"
+              value={format(new Date(selectedDate), 'yyyy-MM')}
+              onChange={(e) => setSelectedDate(e.target.value + '-01')}
+              className="px-4 py-2 bg-neutral-800 border border-neutral-700 rounded text-white focus:outline-none focus:border-blue-500"
+            />
+          )}
+        </div>
+
+        {/* Active Filter Display */}
+        <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg px-4 py-2">
+          <p className="text-blue-400 text-sm">
+            <span className="font-semibold">Showing:</span>{' '}
+            {dateFilter === 'last7' && 'Last 7 days'}
+            {dateFilter === 'last30' && 'Last 30 days'}
+            {dateFilter === 'last90' && 'Last 90 days'}
+            {dateFilter === 'lifetime' && 'All time data'}
+            {dateFilter === 'month' && `${format(new Date(selectedDate), 'MMMM yyyy')}`}
+            {' '}({bookings.length} bookings)
+          </p>
+        </div>
       </div>
 
       {/* Daily Report */}

@@ -109,6 +109,8 @@ export interface Booking {
   guests: number;
   check_in: string;
   check_out: string;
+  check_in_time?: string;
+  check_out_time?: string;
   nights: number;
   price_per_night: number;
   discount: number;

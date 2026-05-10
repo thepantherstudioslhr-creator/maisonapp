@@ -105,6 +105,18 @@ const BookingForm: React.FC<BookingFormProps> = ({ apartment, onClose, onComplet
         ? Math.round((subtotal - formData.discount + formData.extra_charges) / nights)
         : formData.price_per_night;
 
+      // Calculate check-in time
+      let checkInTime: string | undefined;
+      if (bookingStatus === 'active') {
+        // Same day booking - use current time
+        checkInTime = new Date().toISOString();
+      } else {
+        // Advance booking - set check-in time to 1 PM on check-in date
+        const scheduledCheckIn = new Date(formData.check_in);
+        scheduledCheckIn.setHours(13, 0, 0, 0); // 1 PM
+        checkInTime = scheduledCheckIn.toISOString();
+      }
+
       const bookingData = {
         apartment_id: apartment.id,
         client_name: formData.client_name,
@@ -113,6 +125,7 @@ const BookingForm: React.FC<BookingFormProps> = ({ apartment, onClose, onComplet
         guests: formData.guests,
         check_in: formData.check_in,
         check_out: formData.check_out,
+        check_in_time: checkInTime,
         nights,
         price_per_night: effectivePricePerNight,
         discount: formData.discount,

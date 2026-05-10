@@ -53,9 +53,16 @@ const BookingsList: React.FC<BookingsListProps> = ({ onBookingUpdated }) => {
 
   const handleStatusChange = async (bookingId: string, newStatus: BookingStatus) => {
     try {
+      const updateData: any = { status: newStatus };
+
+      // Add check-out time when marking as completed
+      if (newStatus === 'completed') {
+        updateData.check_out_time = new Date().toISOString();
+      }
+
       const { error } = await supabase
         .from('bookings')
-        .update({ status: newStatus })
+        .update(updateData)
         .eq('id', bookingId);
 
       if (error) throw error;
